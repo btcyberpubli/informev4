@@ -808,158 +808,123 @@
                     color: #9d8a5a !important;
                 }
 
-                .campaign-bar.campaign-bar-paused .precio-naranja {
-                    background: #d9c9b0 !important;
-                    color: #a67a4a !important;
-                    box-shadow: none !important;
-                }
+                /**
+                 * Renderizar resultados que no tienen relación directa con Meta Ads.
+                 * Se muestran en un bloque aparte, fuera del panel 463.
+                 */
+                function renderizarCampaniasSinDatosCRM() {
+                    const campaniasMetaAds = datosGlobales.campaniasMetaAds?.datos || [];
 
-                .campaign-bar.campaign-bar-paused .precio-naranja .campaign-stat-value {
-                    color: #a67a4a !important;
-                }
+                    const { campanas: campaniasPorPanel } = agruparCampaniasPorPanelConUsuario();
+                    const campaniasMapeadas = new Set();
+                    Object.values(campaniasPorPanel).forEach(campañas => {
+                        campañas.forEach(c => campaniasMapeadas.add(c.id));
+                    });
 
-                .campaign-bar.campaign-bar-paused .precio-rojo {
-                    background: #d9b8b0 !important;
-                    color: #a25a52 !important;
-                    box-shadow: none !important;
-                }
+                    const campaniasSinMapeo = [];
+                    campaniasMetaAds.forEach(usuario => {
+                        usuario.cuentas?.forEach(cuenta => {
+                            cuenta.campanias?.forEach(campania => {
+                                const gasto = parseFloat(campania.metricas_diarias?.spend || 0);
+                                if (gasto > 0 && !campaniasMapeadas.has(campania.id)) {
+                                    campaniasSinMapeo.push({
+                                        ...campania,
+                                        usuario: usuario.nombre,
+                                        cuenta: cuenta.id
+                                    });
+                                }
+                            });
+                        });
+                    });
 
-                .campaign-bar.campaign-bar-paused .precio-rojo .campaign-stat-value {
-                    color: #a25a52 !important;
-                }
+                    if (campaniasSinMapeo.length === 0) {
+                        return '';
+                    }
 
-                .campaign-bar:hover {
-                    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
-                }
+                    let html = '<div class="section">';
+                    html += '<div class="section-title">⚠️ Resultados sin relación con Meta Ads</div>';
+                    html += '<div class="section-subtitle">Bloque aparte para revisar campañas que no entran en el panel 463.</div>';
+                    html += '<div class="panels-container">';
 
-                /* CAMPAÑA PAUSADA - ESTILO GRIS */
-                .campaign-bar.campaign-bar-paused {
-                    background: #d0d0d0 !important;
-                    border-color: #95a5a6 !important;
-                }
+                    const porUsuario = {};
+                    campaniasSinMapeo.forEach(campania => {
+                        if (!porUsuario[campania.usuario]) {
+                            porUsuario[campania.usuario] = [];
+                        }
+                        porUsuario[campania.usuario].push(campania);
+                    });
 
-                .campaign-bar.campaign-bar-sin-meta {
-                    border-style: dashed;
-                    border-color: #f39c12;
-                    background: linear-gradient(135deg, #fff7e6 0%, #ffe8c2 100%);
-                }
+                    Object.entries(porUsuario).forEach(([usuario, campanias]) => {
+                        html += '<div class="panel-section" style="grid-template-columns: 1fr;">';
+                        html += '<div class="panel-info">';
+                        html += '<div class="panel-info-header" style="background-color: #fff3cd; color: #856404;">👤 ' + usuario + '</div>';
+                        html += '</div>';
+                        html += '<div>';
+                        html += '<div class="campaigns-list">';
 
-                body.dark-mode .campaign-bar.campaign-bar-sin-meta {
-                    border-color: #d68910;
-                    background: linear-gradient(135deg, #5a4a2a 0%, #4a3d23 100%);
-                }
+                        let totalGasto = 0;
+                        let totalMensajes = 0;
 
-                .input-gasto-sin-meta {
-                    width: 78px;
-                    padding: 3px 4px;
-                    font-size: 10px;
-                    border: 1px solid #d5b77a;
-                    border-radius: 3px;
-                    text-align: right;
-                    font-weight: 700;
-                    color: #2c3e50;
-                    background: #fff;
-                }
+                        campanias.forEach(campania => {
+                            const metricas = campania.metricas_diarias || {};
+                            const gasto = parseFloat(metricas.spend || 0);
+                            const adsMensajes = metricas.messages || 0;
+                            const estado = campania.estado === 'ACTIVE' ? 'Activa' : 'Pausada';
+                            const costoPorMensaje = adsMensajes > 0 ? gasto / adsMensajes : 0;
 
-                .input-gasto-sin-meta:focus {
-                    outline: none;
-                    border-color: #f39c12;
-                    box-shadow: 0 0 0 2px rgba(243, 156, 18, 0.2);
-                }
+                            totalGasto += gasto;
+                            totalMensajes += adsMensajes;
 
-                body.dark-mode .input-gasto-sin-meta {
-                    color: var(--text-primary);
-                    background: var(--bg-secondary);
-                    border-color: #9c7a35;
-                }
+                            const colorClass = getColorClassForPrice(costoPorMensaje);
+                            const bgClass = getBackgroundClassForPrice(costoPorMensaje);
+                            const isPaused = campania.estado !== 'ACTIVE';
+                            const pausedClass = isPaused ? 'campaign-bar-paused' : '';
 
-                .input-nombre-sin-meta {
-                    width: 280px;
-                    max-width: 100%;
-                    padding: 3px 6px;
-                    font-size: 11px;
-                    border: 1px solid #d5b77a;
-                    border-radius: 3px;
-                    font-weight: 600;
-                    color: #2c3e50;
-                    background: #fffdf7;
-                }
+                            html += '<div class="campaign-bar ' + bgClass + ' ' + pausedClass + '">'
+                                + '<span class="campaign-bar-name">' + campania.nombre + '</span>'
+                                + '<div class="campaign-bar-stats">'
+                                + '<div class="campaign-stat-item">'
+                                + '<span class="campaign-stat-label">Gasto</span>'
+                                + '<span class="campaign-stat-value">$' + gasto.toFixed(2) + '</span>'
+                                + '</div>'
+                                + '<div class="campaign-stat-item">'
+                                + '<span class="campaign-stat-label">Ads</span>'
+                                + '<span class="campaign-stat-value">' + adsMensajes + '</span>'
+                                + '</div>'
+                                + '<div class="campaign-stat-item ' + colorClass + '">'
+                                + '<span class="campaign-stat-label">$ / Msg</span>'
+                                + '<span class="campaign-stat-value">$' + costoPorMensaje.toFixed(2) + '</span>'
+                                + '</div>'
+                                + '<div class="campaign-stat-item">'
+                                + '<span class="campaign-stat-label">Estado</span>'
+                                + '<span class="campaign-stat-value ' + (estado === 'Activa' ? 'estado-activo' : 'estado-pausado') + '">' + estado + '</span>'
+                                + '</div>'
+                                + '</div>'
+                                + '</div>';
+                        });
 
-                .input-nombre-sin-meta:focus {
-                    outline: none;
-                    border-color: #f39c12;
-                    box-shadow: 0 0 0 2px rgba(243, 156, 18, 0.2);
-                }
+                        html += '</div>';
 
-                body.dark-mode .input-nombre-sin-meta {
-                    color: var(--text-primary);
-                    background: var(--bg-secondary);
-                    border-color: #9c7a35;
-                }
+                        if (campanias.length > 0) {
+                            const costoPorMensajePromedio = totalMensajes > 0 ? totalGasto / totalMensajes : 0;
+                            const claseProgreso = costoPorMensajePromedio < 0.5 ? 'progreso-completo' : 
+                                                costoPorMensajePromedio < 1.0 ? 'progreso-alto' :
+                                                costoPorMensajePromedio < 1.5 ? 'progreso-medio' : 'progreso-bajo';
 
-                .campaign-bar.campaign-bar-paused .campaign-bar-name,
-                .campaign-bar.campaign-bar-paused .campaign-stat-label,
-                .campaign-bar.campaign-bar-paused .campaign-stat-value {
-                    color: #2c3e50 !important;
-                }
+                            html += '<div class="totales-cargas ' + claseProgreso + '">'
+                                + '💰 <span class="totales-label">Gasto Total</span>: <span class="totales-valor">$' + totalGasto.toFixed(2) + '</span>'
+                                + ' | 📨 <span class="totales-label">Mensajes</span>: <span class="totales-valor">' + totalMensajes + '</span>'
+                                + ' | 📊 <span class="totales-label">Promedio</span>: <span class="totales-valor">$' + costoPorMensajePromedio.toFixed(2) + '</span>'
+                                + '</div>';
+                        }
 
-                /* ESTILOS PARA TOGGLE SWITCH - CAMPAÑAS SIN META */
-                .toggle-sin-meta-label {
-                    font-size: 9px;
-                    font-weight: 700;
-                    color: var(--text-secondary);
-                    margin-right: 4px;
-                    text-transform: uppercase;
-                    letter-spacing: 0.3px;
-                }
+                        html += '</div>';
+                        html += '</div>';
+                    });
 
-                .toggle-switch {
-                    position: relative;
-                    width: 40px;
-                    height: 22px;
-                    background: #bdc3c7;
-                    border-radius: 11px;
-                    cursor: pointer;
-                    transition: background 0.3s ease;
-                    border: none;
-                    padding: 0;
-                    margin: 0;
+                    html += '</div></div>';
+                    return html;
                 }
-
-                .toggle-switch.active {
-                    background: #27ae60;
-                }
-
-                .toggle-switch::after {
-                    content: '';
-                    position: absolute;
-                    width: 18px;
-                    height: 18px;
-                    background: white;
-                    border-radius: 50%;
-                    top: 2px;
-                    left: 2px;
-                    transition: left 0.3s ease;
-                }
-
-                .toggle-switch.active::after {
-                    left: 20px;
-                }
-
-                .toggle-status-text {
-                    font-size: 9px;
-                    font-weight: 700;
-                    min-width: 45px;
-                    text-align: center;
-                    text-transform: uppercase;
-                    letter-spacing: 0.2px;
-                    color: var(--text-secondary);
-                }
-
-                .toggle-status-text.active {
-                    color: #27ae60;
-                }
-
                 .toggle-status-text.paused {
                     color: #c0392b;
                 }
@@ -1046,6 +1011,54 @@
 
                 .landing-link-feedback.warn {
                     color: #d35400;
+                }
+
+                .landing-assign-controls {
+                    display: flex;
+                    flex-wrap: wrap;
+                    gap: 4px;
+                    align-items: center;
+                    width: 100%;
+                }
+
+                .landing-assign-controls select,
+                .landing-assign-controls input {
+                    font-size: 10px;
+                    border: 1px solid #bdc3c7;
+                    border-radius: 3px;
+                    padding: 2px 4px;
+                }
+
+                .landing-assign-controls select {
+                    min-width: 92px;
+                }
+
+                .landing-assign-controls input {
+                    width: 52px;
+                    text-align: center;
+                }
+
+                .btn-landing-assign-save {
+                    border: 1px solid #1e8449;
+                    background: #27ae60;
+                    color: white;
+                    border-radius: 3px;
+                    font-size: 9px;
+                    font-weight: 700;
+                    padding: 2px 6px;
+                    cursor: pointer;
+                    text-transform: uppercase;
+                }
+
+                .btn-landing-assign-save:hover {
+                    background: #229954;
+                }
+
+                body.dark-mode .landing-assign-controls select,
+                body.dark-mode .landing-assign-controls input {
+                    background: var(--bg-secondary);
+                    color: var(--text-primary);
+                    border-color: var(--border-color);
                 }
 
                 .campaign-stat-item.asignar-input {
@@ -2040,6 +2053,7 @@
                 const STORAGE_KEY_NOMBRES_SIN_META = 'nombres_sin_meta_manual';
                 const STORAGE_KEY_ESTADO_SIN_META = 'estado_sin_meta_pausada';
                 const STORAGE_KEY_LANDING_463 = 'landing_463_por_campania';
+                const STORAGE_KEY_ASIGNACIONES_463 = 'asignaciones_463_por_campania';
 
                 // ========== FUNCIONES AUXILIARES ==========
 
@@ -2211,6 +2225,93 @@
                         feedback.classList.remove('ok');
                         feedback.classList.add('warn');
                     }
+                }
+
+                function guardarLandingConEnter(event, campaniaId, inputId, feedbackId) {
+                    if (event.key !== 'Enter') return;
+                    event.preventDefault();
+                    actualizarLandingAsignadaDesdeInput(campaniaId, inputId, feedbackId);
+                }
+
+                function cargarAsignacionesCampanias463() {
+                    try {
+                        const raw = localStorage.getItem(STORAGE_KEY_ASIGNACIONES_463);
+                        return raw ? JSON.parse(raw) : {};
+                    } catch (error) {
+                        console.warn('⚠️ No se pudo leer asignaciones 463:', error);
+                        return {};
+                    }
+                }
+
+                function guardarAsignacionesCampanias463(data) {
+                    try {
+                        localStorage.setItem(STORAGE_KEY_ASIGNACIONES_463, JSON.stringify(data));
+                    } catch (error) {
+                        console.warn('⚠️ No se pudo guardar asignaciones 463:', error);
+                    }
+                }
+
+                function normalizarClaveCampania463(campaniaId) {
+                    return String(campaniaId || '').trim();
+                }
+
+                function obtenerAsignacionCampania463(campaniaId) {
+                    const mapa = cargarAsignacionesCampanias463();
+                    const clave = normalizarClaveCampania463(campaniaId);
+                    return mapa[clave] || { landing: '', mensajes: '' };
+                }
+
+                function guardarAsignacionCampania463(campaniaId, landing, mensajes) {
+                    const mapa = cargarAsignacionesCampanias463();
+                    const clave = normalizarClaveCampania463(campaniaId);
+                    if (!clave) return;
+
+                    const landingLimpia = String(landing || '').trim();
+                    const mensajesNumericos = Math.max(0, parseInt(mensajes || 0, 10) || 0);
+
+                    if (landingLimpia || mensajesNumericos > 0) {
+                        mapa[clave] = {
+                            landing: landingLimpia,
+                            mensajes: mensajesNumericos
+                        };
+                    } else {
+                        delete mapa[clave];
+                    }
+
+                    guardarAsignacionesCampanias463(mapa);
+                }
+
+                function actualizarAsignacionCampania463DesdeInputs(campaniaId, selectId, inputId, feedbackId) {
+                    const select = document.getElementById(selectId);
+                    const input = document.getElementById(inputId);
+                    const feedback = document.getElementById(feedbackId);
+                    if (!select || !input || !feedback) return;
+
+                    const landing = (select.value || '').trim();
+                    const metricasLanding = obtenerMetricasLanding463(landing);
+                    const mensajes = Math.max(0, parseInt(input.value || metricasLanding.mensajes || 0, 10) || 0);
+
+                    if (!landing) {
+                        feedback.textContent = 'Elegí una landing 463';
+                        feedback.classList.remove('ok');
+                        feedback.classList.add('warn');
+                        return;
+                    }
+
+                    guardarAsignacionCampania463(campaniaId, landing, mensajes);
+
+                    const landingTexto = metricasLanding.encontrada ? `${metricasLanding.nombre}: ${metricasLanding.mensajes} mensajes` : landing;
+                    feedback.textContent = `Guardado: ${landingTexto} | Asignados: ${mensajes}`;
+                    feedback.classList.remove('warn');
+                    feedback.classList.add('ok');
+
+                    renderizarDashboard();
+                }
+
+                function guardarAsignacionCampania463ConEnter(event, campaniaId, selectId, inputId, feedbackId) {
+                    if (event.key !== 'Enter') return;
+                    event.preventDefault();
+                    actualizarAsignacionCampania463DesdeInputs(campaniaId, selectId, inputId, feedbackId);
                 }
 
                 // ===== FUNCIONES PARA ESTADO (ACTIVA/PAUSADA) DE CAMPAÑAS SIN META =====
@@ -2872,10 +2973,10 @@
                         campanias.forEach((campania, index) => {
                             const metricas = campania.metricas_diarias || {};
                             const gasto = parseFloat(metricas.spend || 0);
-                            const mensajes = metricas.messages || 0;
-                            const costoPorMensaje = mensajes > 0 ? gasto / mensajes : 0;
+                            const adsMensajes = metricas.messages || 0;
                             const estado = campania.estado === 'ACTIVE' ? 'Activa' : 'Pausada';
-                            const campaniaStorageKey = String(campania.id || campania.nombre || `camp_${index}`);
+
+                            const campaniaStorageKey = `meta::${String(campania.id || campania.nombre || `camp_${index}`)}`;
                             const landingAsignada = obtenerLandingAsignada463(campaniaStorageKey);
                             const metricasAsociadas463 = obtenerMetricasLanding463(landingAsignada);
                             const idBase = String(campania.id || index).replace(/[^a-zA-Z0-9_-]/g, '_');
@@ -2888,8 +2989,13 @@
                                 : (landingAsignada ? 'Landing guardada pero sin coincidencia en panel 463' : 'Sin landing asignada');
                             const landingClass = metricasAsociadas463.encontrada ? 'ok' : 'warn';
 
+                            const clyMensajes = metricasAsociadas463.encontrada ? metricasAsociadas463.mensajes : 0;
+                            const clyCargas = metricasAsociadas463.encontrada ? metricasAsociadas463.cargas : 0;
+                            const denominadorCosto = clyMensajes > 0 ? clyMensajes : adsMensajes;
+                            const costoPorMensaje = denominadorCosto > 0 ? gasto / denominadorCosto : 0;
+
                             totalGasto += gasto;
-                            totalMensajes += mensajes;
+                            totalMensajes += adsMensajes;
 
                             const colorClass = getColorClassForPrice(costoPorMensaje);
                             const bgClass = getBackgroundClassForPrice(costoPorMensaje);
@@ -2904,12 +3010,20 @@
                                 + '<span class="campaign-stat-value">$' + gasto.toFixed(2) + '</span>'
                                 + '</div>'
                                 + '<div class="campaign-stat-item">'
-                                + '<span class="campaign-stat-label">Mensajes</span>'
-                                + '<span class="campaign-stat-value">' + mensajes + '</span>'
+                                + '<span class="campaign-stat-label">Ads</span>'
+                                + '<span class="campaign-stat-value">' + adsMensajes + '</span>'
+                                + '</div>'
+                                + '<div class="campaign-stat-item">'
+                                + '<span class="campaign-stat-label">CLY 463</span>'
+                                + '<span class="campaign-stat-value">' + clyMensajes + '</span>'
                                 + '</div>'
                                 + '<div class="campaign-stat-item ' + colorClass + '">'
                                 + '<span class="campaign-stat-label">$ / Msg</span>'
                                 + '<span class="campaign-stat-value">$' + costoPorMensaje.toFixed(2) + '</span>'
+                                + '</div>'
+                                + '<div class="campaign-stat-item">'
+                                + '<span class="campaign-stat-label">Cargas 463</span>'
+                                + '<span class="campaign-stat-value">' + clyCargas + '</span>'
                                 + '</div>'
                                 + '<div class="campaign-stat-item">'
                                 + '<span class="campaign-stat-label">Estado</span>'
@@ -2918,8 +3032,8 @@
                                 + '<div class="campaign-stat-item campaign-stat-landing">'
                                 + '<span class="campaign-stat-label">Landing 463</span>'
                                 + '<div class="landing-link-controls">'
-                                + '<input id="' + landingInputId + '" class="input-landing-link" type="text" placeholder="Landing 1" value="' + landingValorSafe + '">'
-                                + '<button class="btn-landing-link" onclick="actualizarLandingAsignadaDesdeInput(\'' + campaniaStorageKeyJs + '\', \'' + landingInputId + '\', \'' + landingFeedbackId + '\')">Guardar</button>'
+                                + '<input id="' + landingInputId + '" class="input-landing-link" type="text" placeholder="1 / Landing 1" value="' + landingValorSafe + '" onkeydown="guardarLandingConEnter(event, \'' + campaniaStorageKeyJs + '\', \'' + landingInputId + '\', \'' + landingFeedbackId + '\')">'
+                                + '<button class="btn-landing-link" onclick="actualizarLandingAsignadaDesdeInput(\'' + campaniaStorageKeyJs + '\', \'' + landingInputId + '\', \'' + landingFeedbackId + '\')">Ingresar landing</button>'
                                 + '</div>'
                                 + '<span id="' + landingFeedbackId + '" class="landing-link-feedback ' + landingClass + '">' + landingInfo + '</span>'
                                 + '</div>'
@@ -2997,7 +3111,7 @@
                             let totalMensajes = 0;
 
                             campaniasFiltradas.forEach(campania => {
-                                html += generarBarraCampania(campania);
+                                html += generarBarraCampania(campania, '');
                                 totalGasto += parseFloat(campania.metricas_diarias?.spend || 0);
                                 totalMensajes += campania.metricas_diarias?.messages || 0;
                             });
@@ -3338,19 +3452,15 @@
                         let totalAds = 0;
                         let totalClv = 0;
                         
-                        campaniasFiltradas.forEach(campania => {
-                            html += generarBarraCampania(campania);
+                            campaniasFiltradas.forEach(campania => {
+                                html += generarBarraCampania(campania, panel.id);
                             totalAds += campania.metricas_diarias?.messages || 0;
-                            totalClv += campania.cly_para_campania || 0;
+                                const clvBase = panel.id === '463'
+                                    ? parseInt(obtenerAsignacionCampania463(campania.id || campania.nombre || '').mensajes || 0, 10)
+                                    : (campania.cly_para_campania || 0);
+                                totalClv += clvBase;
                         });
 
-                        const filasSinCoincidencia = obtenerFilasSinCoincidenciaMeta(panel, campaniasFiltradas);
-                        if (filasSinCoincidencia.length > 0) {
-                            filasSinCoincidencia.forEach(fila => {
-                                html += generarBarraSinCoincidenciaMeta(panel, fila);
-                            });
-                        }
-                        
                         // Agregar los mensajes sin campaña al total CLY
                         totalClv += sinCampana;
                         
@@ -3371,15 +3481,6 @@
                         </div>`;
                     } else {
                         html += '<div style="padding: 16px; color: #999; font-size: 15px;">Sin campañas con gasto</div>';
-
-                        const filasSinCoincidencia = obtenerFilasSinCoincidenciaMeta(panel, []);
-                        if (filasSinCoincidencia.length > 0) {
-                            html += '<div class="campaigns-list">';
-                            filasSinCoincidencia.forEach(fila => {
-                                html += generarBarraSinCoincidenciaMeta(panel, fila);
-                            });
-                            html += '</div>';
-                        }
 
                         const totalClvSinCampanias = sinCampana;
                         const porcentajeSinCampanias = objetivoActual > 0 ? Math.round((totalClvSinCampanias / objetivoActual) * 100) : 0;
@@ -3450,7 +3551,6 @@
                 function generarBarraSinCoincidenciaMeta(panel, fila) {
                     const campaniaEncoded = encodeURIComponent(fila.campania);
                     const gastoManual = obtenerGastoManualSinMeta(panel.id, fila.campania);
-                    const nombreManual = obtenerNombreManualSinMeta(panel.id, fila.campania);
                     const costoManual = fila.mensajes > 0 ? gastoManual / fila.mensajes : 0;
                     const colorClass = getColorClassForPrice(costoManual);
                     const estaPausada = obtenerEstadoSinMeta(panel.id, fila.campania);
@@ -3462,15 +3562,9 @@
                         <div class="campaign-bar campaign-bar-sin-meta ${clasePausada}">
                             <div style="width: 100%; display: flex; flex-direction: column; gap: 4px;">
                                 <span class="texto-sin-coincidencias">Resultados sin coincidencias en Meta Ads:</span>
-                                <input
-                                    type="text"
-                                    class="input-nombre-sin-meta"
-                                    data-panel-id="${panel.id}"
-                                    data-campania-key="${campaniaEncoded}"
-                                    placeholder="${fila.campania}"
-                                    value="${nombreManual.replace(/&/g, '&amp;').replace(/"/g, '&quot;')}"
-                                    oninput="actualizarNombreSinMetaDesdeInput(this)"
-                                >
+                                <div class="landing-link-feedback warn">
+                                    Comentario: asociar esta fila desde la campaña Meta correspondiente de arriba.
+                                </div>
                             </div>
                             <div class="campaign-bar-stats">
                                 <div class="campaign-stat-item">
@@ -3585,18 +3679,30 @@
                 /**
                  * Generar barra de campaña con datos correctos + adsets
                  */
-                function generarBarraCampania(campania) {
+                function generarBarraCampania(campania, panelId = '') {
                     const metricas = campania.metricas_diarias || {};
                     const estado = campania.estado === 'ACTIVE' ? 'Activa' : 'Pausada';
                     const gasto = parseFloat(metricas.spend || 0);
                     const gastoStr = gasto.toFixed(2);
+                    const esPanel463 = String(panelId || '') === '463';
+                    const campaniaKey = String(campania.id || campania.nombre || '').trim();
+                    const campaniaIdBase = campaniaKey.replace(/[^a-zA-Z0-9_-]/g, '_') || `campania_${Date.now()}`;
+                    const campaniaKeyJs = campaniaKey.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+                    const panel463 = esPanel463 ? obtenerPanel463() : null;
+                    const asignacion463 = esPanel463 ? obtenerAsignacionCampania463(campaniaKey) : { landing: '', mensajes: '' };
+                    const landingSeleccionada = String(asignacion463.landing || '').trim();
+                    const metricasLandingSeleccionada = landingSeleccionada ? obtenerMetricasLanding463(landingSeleccionada) : { encontrada: false, nombre: '', mensajes: 0, cargas: 0 };
+                    const mensajesAsignados463 = esPanel463
+                        ? Math.max(0, parseInt(asignacion463.mensajes || (metricasLandingSeleccionada.encontrada ? metricasLandingSeleccionada.mensajes : 0) || 0, 10) || 0)
+                        : 0;
                     
                     // ADS = metricas_diarias.messages (de Meta Ads)
                     const ads = metricas.messages || 0;
                     // CLY = reportePaneles.campañas[LETRA].mensajes
-                    const clv = campania.cly_para_campania || 0;
+                    const clv = esPanel463 ? mensajesAsignados463 : (campania.cly_para_campania || 0);
                     // Cargas = reportePaneles.campañas[LETRA].cargas
                     const cargas = campania.cargas_para_campania || 0;
+                    const fuenteOrigen = esPanel463 ? '463' : (campania.fuente_origen || '');
                     
                     // Costo por mensaje = gasto / CLY (NO sobre Ads)
                     // Si no hay CLY (Clientify vacío), usar Ads como fallback
@@ -3614,6 +3720,20 @@
                     // ✅ Extraer letra de campaña del nombre
                     const letraMatch = campania.nombre.match(/-([a-z])-/i);
                     const letra = letraMatch ? letraMatch[1].toUpperCase() : 'X';
+                    const landingOptionsHtml = esPanel463 && panel463?.campañas ? Object.entries(panel463.campañas).map(([landing, datosLanding]) => {
+                        const mensajesLanding = parseInt(datosLanding?.mensajes || 0, 10);
+                        const selected = landingSeleccionada === landing ? 'selected' : '';
+                        return `<option value="${landing}" ${selected}>${landing} (${mensajesLanding})</option>`;
+                    }).join('') : '';
+                    const mensajesInputValue = esPanel463 ? (mensajesAsignados463 || metricasLandingSeleccionada.mensajes || '') : '';
+                    const landingFeedbackText = esPanel463
+                        ? (landingSeleccionada
+                            ? (metricasLandingSeleccionada.encontrada
+                                ? `Guardada: ${metricasLandingSeleccionada.nombre} | Mensajes: ${mensajesAsignados463}`
+                                : `Landing guardada: ${landingSeleccionada} | Mensajes: ${mensajesAsignados463}`)
+                            : 'Elegí una landing 463 y guardá la asignación')
+                        : '';
+                    const landingFeedbackClass = esPanel463 && landingSeleccionada && mensajesAsignados463 > 0 ? 'ok' : 'warn';
 
                     // 🎯 Generar HTML de adsets si existen
                     let adsetsHtml = '';
@@ -3672,7 +3792,7 @@
                                     <span class="campaign-stat-value">${ads}</span>
                                 </div>
                                 <div class="campaign-stat-item">
-                                    <span class="campaign-stat-label">${campania.fuente_origen}</span>
+                                    <span class="campaign-stat-label">${fuenteOrigen}</span>
                                     <span class="campaign-stat-value">${clv}</span>
                                 </div>
                                 <div class="campaign-stat-item ${colorClass}">
@@ -3687,6 +3807,20 @@
                                     <span class="campaign-stat-label">Estado</span>
                                     <span class="campaign-stat-value ${estado === 'Activa' ? 'estado-activo' : 'estado-pausado'}">${estado}</span>
                                 </div>
+                                ${esPanel463 ? `
+                                <div class="campaign-stat-item campaign-stat-landing">
+                                    <span class="campaign-stat-label">Asignar 463</span>
+                                    <div class="landing-assign-controls">
+                                        <select id="landing-select-${campaniaIdBase}" onchange="(function(){ const input = document.getElementById('landing-msg-${campaniaIdBase}'); if (input) { const met = obtenerMetricasLanding463(this.value); input.value = met.encontrada ? met.mensajes : ''; } }).call(this);">
+                                            <option value="">Elegir landing</option>
+                                            ${landingOptionsHtml}
+                                        </select>
+                                        <input id="landing-msg-${campaniaIdBase}" type="number" min="0" step="1" value="${mensajesInputValue}">
+                                        <button class="btn-landing-assign-save" onclick="actualizarAsignacionCampania463DesdeInputs('${campaniaKeyJs}', 'landing-select-${campaniaIdBase}', 'landing-msg-${campaniaIdBase}', 'landing-feedback-${campaniaIdBase}')">Guardar</button>
+                                    </div>
+                                    <span id="landing-feedback-${campaniaIdBase}" class="landing-link-feedback ${landingFeedbackClass}">${landingFeedbackText}</span>
+                                </div>
+                                ` : ''}
                                 <div class="campaign-stat-item">
                                     <button class="btn-creativo" onclick="abrirModalCreativo(${JSON.stringify(campania).replace(/"/g, '&quot;')})">👁️ Ver Creativo</button>
                                 </div>
